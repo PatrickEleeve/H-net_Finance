@@ -1,0 +1,26 @@
+# H-Net Stock Market Analysis - Requirements
+
+torch>=1.9.0
+numpy>=1.20.0
+pandas>=1.3.0
+yfinance>=0.2.0
+transformers>=4.20.0
+textblob>=0.17.0
+feedparser>=6.0.0
+beautifulsoup4>=4.10.0
+tqdm>=4.60.0
+requests>=2.25.0
+scikit-learn>=1.0.0
+
+# 可选依赖 (用于更高级功能)
+# optuna>=3.0.0  # 超参数优化
+# plotly>=5.0.0  # 数据可视化
+# streamlit>=1.20.0  # Web界面
+
+# 技术分析库
+TA-Lib>=0.4.24
+
+# 开发依赖
+pytest>=6.0.0
+black>=22.0.0
+flake8>=4.0.0
