@@ -138,7 +138,7 @@ training_config_*.json
 run_training_*.py
 
 # Data files (可选择是否上传)
-stock_data/
+
 *.csv
 *.npy
 *.npz
@@ -161,3 +161,10 @@ models/
 temp/
 tmp/
 *.tmp
+
+# 允许stock_data目录中的数据文件
+!stock_data/
+!stock_data/**/*.npy
+!stock_data/**/*.npz
+!stock_data/**/*.csv
+!stock_data/**/*.json

@@ -1,0 +1,10 @@
+{
+  "symbol": "merged_dataset",
+  "total_samples": 925,
+  "train_samples": 647,
+  "val_samples": 138,
+  "test_samples": 140,
+  "sequence_length": 60,
+  "prediction_horizon": 5,
+  "created_at": "2025-07-15T12:54:26.486918"
+}
