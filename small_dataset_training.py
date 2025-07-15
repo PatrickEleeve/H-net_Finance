@@ -176,10 +176,10 @@ class RegularizedStockTrainer(StockTrainer):
             
             # 前向传播
             self.optimizer.zero_grad()
-            outputs = self.model(price_data, technical_data, news_data)
+            predictions, boundary_loss = self.model(price_data, technical_data, news_data)
             
             # 计算损失
-            losses = self.compute_losses(outputs, targets)
+            losses = self.compute_loss(predictions, targets, boundary_loss)
             total_loss_batch = sum(losses.values())
             
             # 添加L2正则化

@@ -493,11 +493,22 @@ class StockDataset(Dataset):
         
         logger.info(f"Loading {self.split} data from {split_dir}")
         
+        # Auto-detect file naming pattern (with or without time period suffix)
+        # First try new naming pattern with time period suffix
+        import glob
+        price_files = glob.glob(os.path.join(split_dir, "merged_dataset_*_price.npy"))
+        if price_files:
+            # Extract the pattern (e.g., "1d_1y" from "merged_dataset_1d_1y_price.npy")
+            base_pattern = os.path.basename(price_files[0]).replace("_price.npy", "").replace("merged_dataset_", "")
+            suffix = f"_{base_pattern}" if base_pattern else ""
+        else:
+            suffix = ""
+        
         # Load numpy arrays
-        price_file = os.path.join(split_dir, "merged_dataset_price.npy")
-        technical_file = os.path.join(split_dir, "merged_dataset_technical.npy")
-        news_file = os.path.join(split_dir, "merged_dataset_news.npy")
-        targets_file = os.path.join(split_dir, "merged_dataset_targets.npz")
+        price_file = os.path.join(split_dir, f"merged_dataset{suffix}_price.npy")
+        technical_file = os.path.join(split_dir, f"merged_dataset{suffix}_technical.npy")
+        news_file = os.path.join(split_dir, f"merged_dataset{suffix}_news.npy")
+        targets_file = os.path.join(split_dir, f"merged_dataset{suffix}_targets.npz")
         
         # Check if files exist
         for file_path in [price_file, technical_file, news_file, targets_file]:
