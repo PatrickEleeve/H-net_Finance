@@ -90,7 +90,7 @@ def test_with_real_data(model, config):
         from hnet_stock_training import StockDataset
         
         # 加载测试数据
-        test_dataset = StockDataset("stock_data", config, 'test')
+        test_dataset = StockDataset("stock_data_eodhd_extended", config, 'test')
         
         if len(test_dataset) == 0:
             logger.warning("没有测试数据")
@@ -130,7 +130,7 @@ def evaluate_model_performance(model, config):
         from torch.utils.data import DataLoader
         
         # 加载测试数据
-        test_dataset = StockDataset("stock_data", config, 'test')
+        test_dataset = StockDataset("stock_data_eodhd_extended", config, 'test')
         test_loader = DataLoader(test_dataset, batch_size=8, shuffle=False, num_workers=0)
         
         total_samples = 0

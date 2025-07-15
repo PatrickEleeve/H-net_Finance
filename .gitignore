@@ -162,9 +162,9 @@ temp/
 tmp/
 *.tmp
 
-# 允许stock_data目录中的数据文件
-!stock_data/
-!stock_data/**/*.npy
-!stock_data/**/*.npz
-!stock_data/**/*.csv
-!stock_data/**/*.json
+# 允许stock_data_eodhd_extended目录中的数据文件
+!stock_data_eodhd_extended/
+!stock_data_eodhd_extended/**/*.npy
+!stock_data_eodhd_extended/**/*.npz
+!stock_data_eodhd_extended/**/*.csv
+!stock_data_eodhd_extended/**/*.json

@@ -750,7 +750,7 @@ def main():
     trainer = StockTrainer(config, device)
     
     # Create datasets using our generated data
-    data_path = "stock_data"  # Path to our generated data
+    data_path = "stock_data_eodhd_extended"  # Path to our generated data
     
     try:
         train_dataset = StockDataset(data_path, config, 'train')
