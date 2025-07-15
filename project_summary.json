@@ -1,7 +1,7 @@
 {
   "project": "H-Net Stock Market Analysis",
   "version": "1.0.0",
-  "created": "2025-07-15T13:35:06.847430",
+  "created": "2025-07-15T13:37:15.702064",
   "features": [
     "Multi-modal data fusion (price + technical + news)",
     "H-Net architecture with dynamic chunking",
