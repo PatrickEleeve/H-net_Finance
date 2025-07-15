@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-针对小数据集的优化训练配置
+针对小数据集的优化训练配置 - 增强版本，包含详细训练监控
 """
 
 import torch
@@ -8,6 +8,10 @@ import torch.nn as nn
 from hnet_stock_training import HNetConfig, StockTrainer, StockDataset
 import json
 import os
+import time
+import sys
+from datetime import datetime, timedelta
+from collections import defaultdict, deque
 
 class SmallDatasetConfig:
     """针对小数据集的优化配置"""
@@ -90,6 +94,129 @@ class SmallDatasetConfig:
         
         return configs
 
+class TrainingMonitor:
+    """训练监控器 - 提供详细的训练过程可视化"""
+    
+    def __init__(self):
+        self.epoch_start_time = None
+        self.batch_start_time = None
+        self.loss_history = defaultdict(list)
+        self.speed_history = deque(maxlen=50)  # 保留最近50个批次的速度
+        self.total_batches = 0
+        self.current_epoch = 0
+        
+    def start_epoch(self, epoch, total_batches):
+        """开始新的epoch"""
+        self.current_epoch = epoch
+        self.total_batches = total_batches
+        self.epoch_start_time = time.time()
+        print(f"\n{'='*60}")
+        print(f"🚀 Epoch {epoch+1} 开始 ({datetime.now().strftime('%H:%M:%S')})")
+        print(f"{'='*60}")
+        
+    def start_batch(self, batch_idx):
+        """开始新的批次"""
+        self.batch_start_time = time.time()
+        
+    def end_batch(self, batch_idx, losses, batch_size):
+        """结束批次，记录信息"""
+        if self.batch_start_time is None:
+            return
+            
+        batch_time = time.time() - self.batch_start_time
+        samples_per_sec = batch_size / batch_time if batch_time > 0 else 0
+        self.speed_history.append(samples_per_sec)
+        
+        # 记录损失
+        for key, value in losses.items():
+            if isinstance(value, torch.Tensor):
+                self.loss_history[key].append(value.item())
+            else:
+                self.loss_history[key].append(float(value))
+        
+        # 计算进度
+        progress = (batch_idx + 1) / self.total_batches
+        
+        # 计算预估剩余时间
+        if len(self.speed_history) > 0:
+            avg_speed = sum(self.speed_history) / len(self.speed_history)
+            remaining_batches = self.total_batches - (batch_idx + 1)
+            remaining_time = remaining_batches * batch_time if avg_speed > 0 else 0
+            eta = datetime.now() + timedelta(seconds=remaining_time)
+        else:
+            eta = None
+            avg_speed = 0
+        
+        # 打印详细信息
+        if (batch_idx + 1) % max(1, self.total_batches // 10) == 0 or batch_idx == 0:
+            self._print_batch_info(batch_idx, progress, losses, samples_per_sec, eta)
+    
+    def _print_batch_info(self, batch_idx, progress, losses, speed, eta):
+        """打印批次信息"""
+        # 进度条
+        bar_length = 40
+        filled_length = int(bar_length * progress)
+        bar = '█' * filled_length + '▓' * (bar_length - filled_length)
+        
+        # 主要损失
+        total_loss = losses.get('total', 0)
+        if isinstance(total_loss, torch.Tensor):
+            total_loss = total_loss.item()
+        
+        print(f"\r批次 {batch_idx+1:4d}/{self.total_batches} |{bar}| "
+              f"{progress*100:5.1f}% | "
+              f"损失: {total_loss:.4f} | "
+              f"速度: {speed:.1f} samples/s", end="")
+        
+        # 每20个批次详细输出
+        if (batch_idx + 1) % max(1, self.total_batches // 5) == 0:
+            print()  # 换行
+            self._print_detailed_losses(losses)
+            if eta:
+                print(f"   ⏰ 预计完成: {eta.strftime('%H:%M:%S')}")
+                print(f"   🏃 当前速度: {speed:.1f} samples/s")
+    
+    def _print_detailed_losses(self, losses):
+        """打印详细损失分解"""
+        print("   📊 损失分解:", end="")
+        for key, value in losses.items():
+            if key != 'total':
+                if isinstance(value, torch.Tensor):
+                    value = value.item()
+                print(f" {key}={value:.4f}", end="")
+        print()
+    
+    def end_epoch(self, train_loss, val_losses):
+        """结束epoch"""
+        if self.epoch_start_time is None:
+            return
+            
+        epoch_time = time.time() - self.epoch_start_time
+        
+        print(f"\n{'='*60}")
+        print(f"✅ Epoch {self.current_epoch+1} 完成")
+        print(f"   ⏱️  用时: {epoch_time:.2f}秒")
+        print(f"   📈 训练损失: {train_loss:.6f}")
+        
+        # 验证损失详情
+        if isinstance(val_losses, dict):
+            print(f"   📉 验证损失: {val_losses.get('total', 0):.6f}")
+            for key, value in val_losses.items():
+                if key != 'total':
+                    if isinstance(value, torch.Tensor):
+                        value = value.item()
+                    print(f"      - {key}: {value:.6f}")
+        else:
+            print(f"   📉 验证损失: {val_losses:.6f}")
+        
+        # GPU内存使用
+        if torch.cuda.is_available():
+            memory_used = torch.cuda.memory_allocated() / 1024**2
+            memory_cached = torch.cuda.memory_reserved() / 1024**2
+            print(f"   💾 GPU内存: {memory_used:.1f}MB 已用, {memory_cached:.1f}MB 缓存")
+        
+        print(f"{'='*60}")
+
 class EarlyStoppingCallback:
     """早停回调"""
     
@@ -157,17 +284,32 @@ class RegularizedStockTrainer(StockTrainer):
             if isinstance(module, nn.Dropout):
                 module.p = current_dropout
     
-    def train_epoch(self, train_loader, epoch):
-        """训练一个epoch，增强正则化"""
+    def compute_l2_regularization(self):
+        """计算L2正则化"""
+        l2_reg = torch.tensor(0.0, device=self.device)
+        for param in self.model.parameters():
+            l2_reg += torch.norm(param, 2) ** 2
+        return l2_reg * self.config.weight_decay
+    
+    def train_epoch(self, dataloader):
+        """训练一个epoch，增强正则化和详细监控"""
         self.model.train()
         
-        # 应用dropout调度
-        self.apply_dropout_schedule(epoch)
+        # 初始化监控
+        if not hasattr(self, 'monitor'):
+            self.monitor = TrainingMonitor()
         
-        total_loss = 0
-        num_batches = 0
+        total_losses = {'total': 0, 'price': 0, 'volatility': 0, 'direction': 0, 'boundary': 0, 'l2_reg': 0}
+        num_batches = len(dataloader)
         
-        for batch_idx, batch in enumerate(train_loader):
+        # 开始epoch监控
+        current_epoch = getattr(self, 'current_training_epoch', 0)
+        self.monitor.start_epoch(current_epoch, num_batches)
+        
+        for batch_idx, batch in enumerate(dataloader):
+            # 开始批次监控
+            self.monitor.start_batch(batch_idx)
+            
             # 数据到设备
             price_data = batch['price'].to(self.device)
             technical_data = batch['technical'].to(self.device)
@@ -180,31 +322,36 @@ class RegularizedStockTrainer(StockTrainer):
             
             # 计算损失
             losses = self.compute_loss(predictions, targets, boundary_loss)
-            total_loss_batch = sum(losses.values())
             
             # 添加L2正则化
             l2_reg = self.compute_l2_regularization()
-            total_loss_batch += l2_reg
+            losses['total'] = losses['total'] + l2_reg
+            losses['l2_reg'] = l2_reg
             
             # 反向传播
-            total_loss_batch.backward()
+            losses['total'].backward()
             
-            # 梯度裁剪（防止梯度爆炸）
+            # 梯度裁剪
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
             
             self.optimizer.step()
             
-            total_loss += total_loss_batch.item()
-            num_batches += 1
+            # 记录损失
+            batch_losses = {k: v.item() for k, v in losses.items()}
+            
+            for k, v in batch_losses.items():
+                if k in total_losses:
+                    total_losses[k] += v
+            
+            # 结束批次监控
+            self.monitor.end_batch(batch_idx, batch_losses, len(price_data))
         
-        return total_loss / num_batches
-    
-    def compute_l2_regularization(self):
-        """计算L2正则化"""
-        l2_reg = 0
-        for param in self.model.parameters():
-            l2_reg += torch.norm(param, 2) ** 2
-        return l2_reg * self.config.weight_decay
+        # 计算平均损失
+        avg_losses = {}
+        for key in total_losses:
+            avg_losses[key] = total_losses[key] / num_batches
+        
+        return avg_losses
     
     def train(self, train_dataset, val_dataset):
         """训练模型，支持早停"""
@@ -228,15 +375,20 @@ class RegularizedStockTrainer(StockTrainer):
             print(f"使用早停机制，耐心度: {self.early_stopping.patience}")
         
         for epoch in range(self.config.max_epochs):
+            # 设置当前epoch用于监控
+            self.current_training_epoch = epoch
+            
             # 训练
-            train_loss = self.train_epoch(train_loader, epoch)
+            train_losses = self.train_epoch(train_loader)
+            train_loss = train_losses['total']
             
             # 验证
             val_losses = self.validate(val_loader)
             val_loss = val_losses['total']
             
-            print(f"Epoch {epoch+1:3d}: Train Loss: {train_loss:.4f}, "
-                  f"Val Loss: {val_loss:.4f}")
+            # 结束epoch监控
+            if hasattr(self, 'monitor'):
+                self.monitor.end_epoch(train_loss, val_losses)
             
             # 学习率调度
             self.scheduler.step(val_loss)
@@ -260,6 +412,18 @@ class RegularizedStockTrainer(StockTrainer):
                     'epoch': epoch
                 }, 'best_small_dataset_model.pth')
 
+class ExtendedHNetConfig(HNetConfig):
+    """扩展的配置类，支持早停等功能"""
+    def __init__(self, **kwargs):
+        super().__init__()
+        # 设置默认的早停相关属性
+        self.early_stopping = False
+        self.patience = 5
+        
+        # 应用传入的配置
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
 def create_small_data_trainer(mode='nano', data_dir='stock_data_eodhd_extended'):
     """创建针对小数据集的训练器"""
     
@@ -268,12 +432,12 @@ def create_small_data_trainer(mode='nano', data_dir='stock_data_eodhd_extended')
     if mode not in configs:
         print(f"未知模式: {mode}")
         print(f"可用模式: {list(configs.keys())}")
-        return None
+        return None, None
     
     config_dict = configs[mode]
     
-    # 创建HNetConfig
-    config = HNetConfig(
+    # 创建扩展的HNetConfig
+    config = ExtendedHNetConfig(
         d_model=config_dict['d_model'],
         num_stages=config_dict['num_stages'],
         encoder_layers=config_dict['encoder_layers'],
@@ -360,7 +524,8 @@ def main():
     # 创建训练器
     trainer, config = create_small_data_trainer(mode, data_dir)
     
-    if trainer is None:
+    if trainer is None or config is None:
+        print("❌ 创建训练器失败")
         return
     
     try:
